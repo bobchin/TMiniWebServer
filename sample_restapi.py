@@ -1,9 +1,5 @@
-from TMiniWebServer import TMiniWebServer, TMiniWebClient, HttpStatusCode
-
-import uasyncio as asyncio
-import gc
-import sys
-from json import loads,dumps
+from TMiniWebServer import TMiniWebServer
+from json import dumps
 
 ##-------------------------------------------------------------------------
 ## REST API 向け
@@ -30,7 +26,7 @@ async def restapi_article_put(client, args):
 @TMiniWebServer.route('/article', method='POST')
 async def restapi_article_post(client):
     data = await client.read_request_json_content()
-    
+
     res_obj = {
         'status' : 'OK',
         'id': 12345,

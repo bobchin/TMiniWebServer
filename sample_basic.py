@@ -1,8 +1,4 @@
-from TMiniWebServer import TMiniWebServer, TMiniWebClient, HttpStatusCode
-
-import uasyncio as asyncio
-import gc
-import sys
+from TMiniWebServer import TMiniWebServer, HttpStatusCode
 
 ##-------------------------------------------------------------------------
 ## 基本形
@@ -10,7 +6,7 @@ import sys
 @TMiniWebServer.route('/simple')
 async def webHandlerTest(client):
     data = 'Hello,world'
-    
+
     ## ステータスコードは明示的に設定が可能で、省略時にはOK(200)が設定されている.
     ## レスポンスヘッダに追加の情報を与えることが可能.
     await client.write_response(data, http_status=HttpStatusCode.OK, headers={ 'myheader': 'sample_value'})

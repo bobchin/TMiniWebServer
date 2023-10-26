@@ -1,7 +1,4 @@
 from TMiniWebServer import TMiniWebServer, TMiniWebSocket
-
-import uasyncio as asyncio
-import gc
 import sys
 
 ##-------------------------------------------------------------------------
