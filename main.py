@@ -11,7 +11,7 @@ from machine import Pin
 import time
 
 ## LED
-led = Pin('LED', Pin.OUT)
+led = Pin(25, Pin.OUT)
 
 ## Webサーバ
 async def webserver():
@@ -37,12 +37,13 @@ async def garbage_collection():
 
 ## メイン
 async def main():
-    sv_task = asyncio.create_task(webserver())
     led_task = asyncio.create_task(blink_led())
     gc_task = asyncio.create_task(garbage_collection())
-    await sv_task
+    sv_task = asyncio.create_task(webserver())
+
     await led_task
     await gc_task
+    await sv_task
 
 loop = asyncio.get_event_loop()
 loop.run_until_complete(main())
