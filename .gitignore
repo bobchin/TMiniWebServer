@@ -1,3 +1,5 @@
 ## ignorefiles
 laninfo.txt
 .vscode
+/sample
+/test
