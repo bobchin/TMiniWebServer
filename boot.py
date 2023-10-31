@@ -1,26 +1,24 @@
-import sys
 import network
-from time import sleep
 
-args = ['IP', 'SUB', 'GW', 'DNS', 'SSID', 'PASS']
+import sys
+import time
+
+args = ['IP', 'SUB', 'GW', 'DNS']
 try:
     with open('laninfo.txt', 'rt') as f:
         args = list(map(lambda s: s.rstrip(), f.readlines()))
-        del args[6:]
+        del args[4:]
 except:
     print("Failed LAN Configuration.")
     sys.exit(1)
 
-print("Connecting to network...")
-wlan = network.WLAN(network.STA_IF)
-if not wlan.isconnected():
-    wlan.active(True)
-    wlan.connect(args[4], args[5])
-    wlan.ifconfig(tuple(args[0:4]))
+nic = network.WIZNET5K()
+nic.active(True)
+nic.ifconfig(tuple(args[0:4])) # 固定IP
+# nic.ifconfig()           # DHCP
 
-    while not wlan.isconnected():
-        print("waiting for connection...")
-        sleep(1)
+while not nic.isconnected():
+    time.sleep(1)
 
 print('Connected!')
-print('####################\nIP: %s\nSUBNET: %s\nGW: %s\nDNS: %s\n####################\n' % wlan.ifconfig())
+print('####################\nIP: %s\nSUBNET: %s\nGW: %s\nDNS: %s\n####################\n' % nic.ifconfig())
