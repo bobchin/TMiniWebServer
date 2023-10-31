@@ -17,11 +17,11 @@ class TMiniWebServerUtil:
             return b.decode('UTF-8')
         except:
             return str(s)
-    
+
     @staticmethod
     def unquote_plus(s):
         return TMiniWebServerUtil.unquote(s.replace('+', ' '))
-    
+
     @staticmethod
     def escape_html(s):
         return ''.join(TMiniWebServerUtil._html_escape_chars.get(c,c) for c in s)
@@ -36,7 +36,7 @@ class TMiniWebServerUtil:
         except Exception as ex:
             # sys.print_exception(ex)
             pass
-        
+
         gc.collect()
         return result
 
