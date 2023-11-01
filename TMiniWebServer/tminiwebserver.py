@@ -1,5 +1,4 @@
 import uasyncio as asyncio
-import socket
 import sys
 import re
 import gc
@@ -52,7 +51,7 @@ class TMiniWebServer:
             cls._decorate_route_handlers.append(item)
             return func
         return websocket_decorator
-    
+
     @staticmethod
     def log(message):
         print(f"[log] {message}")
@@ -123,7 +122,7 @@ class TMiniWebServer:
     # method  : HTTPメソッド
     # return: (ハンドラメソッド, キーのハッシュ)
     def _get_route_handler(self, url_path, method):
-        # TMiniWebServerUtil.dlog(f'search {url_path},{method}')
+        # TMiniWebServer.dlog(f'search {url_path},{method}')
         # try:
         #     if not self._route_handlers:
         #         return (None, None)
@@ -149,7 +148,7 @@ class TMiniWebServer:
         #     print(f"  {url_path}, {method}")
 
         # return (None, None)
-        TMiniWebServerUtil.dlog(f'search {url_path},{method}')
+        TMiniWebServer.dlog(f'search {url_path},{method}')
         try:
             if self._route_handlers:
                 if url_path.endswith('/'):
@@ -488,7 +487,7 @@ class TMiniWebClient:
                 if self._method == 'POST' or self._method == 'PUT':
                     self._content_type = self._headers.get("content-type", None)
                     self._content_length = (int)(self._headers.get('content-length', 0))
-                
+
                 TMiniWebServer.dlog(f"headers={self._headers}")
                 return True
             else:
@@ -529,7 +528,7 @@ class TMiniWebClient:
                     await route(self)
                 result = True
             except Exception as ex:
-                TMiniWebServerUtil.dlog(f"in _routeing_http: {ex}")
+                TMiniWebServer.dlog(f"in _routeing_http: {ex}")
         # 登録された処理がない場合
         else:
             TMiniWebServer.dlog('routing is not found.')
@@ -585,7 +584,7 @@ class TMiniWebClient:
         except Exception as ex:
             TMiniWebServer.log(ex)
             return False
-        
+
         return True
 
 # WebSocket通信処理をするクラス
