@@ -122,59 +122,34 @@ class TMiniWebServer:
     # method  : HTTPメソッド
     # return: (ハンドラメソッド, キーのハッシュ)
     def _get_route_handler(self, url_path, method):
-        # TMiniWebServer.dlog(f'search {url_path},{method}')
-        # try:
-        #     if not self._route_handlers:
-        #         return (None, None)
-
-        #     url_path = url_path.rstrip('/')
-        #     method = method.upper()
-
-        #     filterd_handlers = [h for h in self._route_handlers if h.method == method and h.route_regex.match(url_path)]
-        #     if len(filterd_handlers) == 0:
-        #         return (None, None)
-
-        #     handler = filterd_handlers[0]
-        #     if handler.route_arg_names:
-        #         values = handler.route_regex.findall(url_path)[0]
-        #         values = list(map(lambda s: int(s) if s.isdigit() else s, values))
-        #         route_args = dict(zip(handler.route_arg_names, values))
-        #     else:
-        #         route_args = None
-        #     return (handler.func, route_args)
-
-        # except Exception as ex:
-        #     sys.print_exception(ex)
-        #     print(f"  {url_path}, {method}")
-
-        # return (None, None)
         TMiniWebServer.dlog(f'search {url_path},{method}')
         try:
-            if self._route_handlers:
-                if url_path.endswith('/'):
-                    url_path = url_path[:-1]
-                method = method.upper()
-                for handler in self._route_handlers:
-                    if handler.method == method:
-                        m = handler.route_regex.match(url_path)
-                        if m:
-                            if handler.route_arg_names:
-                                route_args = { }
-                                for i, name in enumerate(handler.route_arg_names):
-                                    value = m.group(i+1)
-                                    try:
-                                        value = int(value)
-                                    except:
-                                        pass
-                                    route_args[name] = value
-                                return (handler.func, route_args)
-                            else:
-                                return (handler.func, None)
+            # ルートハンドラが登録されているか
+            if not self._route_handlers:
+                return (None, None)
+
+            url_path = url_path.rstrip('/')
+            method = method.upper()
+
+            # 登録されているルートハンドラからURLが対応するものを抽出
+            filterd_handlers = [h for h in self._route_handlers if h.method == method and h.route_regex.match(url_path)]
+            if len(filterd_handlers) == 0:
+                return (None, None)
+
+            handler = filterd_handlers[0]
+            if handler.route_arg_names:
+                # <xxx> で指定された部分を辞書化する
+                values = handler.route_regex.findall(url_path)[0]
+                values = list(map(lambda s: int(s) if s.isdigit() else s, values))
+                route_args = dict(zip(handler.route_arg_names, values))
+            else:
+                route_args = None
+            return (handler.func, route_args)
+
         except Exception as ex:
             sys.print_exception(ex)
             print(f"  {url_path}, {method}")
-
-        return (None, None)
+            return (None, None)
 
     # サーバメイン処理
     async def _server_proc(self, reader, writer):
@@ -215,49 +190,6 @@ class TMiniWebServer:
             return None, None
         mime_type = TMiniWebServerUtil.get_minetype_from_ext(file_path)
         return file_path, mime_type
-
-    _http_status_messages = {
-        HttpStatusCode.SWITCH_PROTOCOLS: 'Switching Protocols',
-        HttpStatusCode.OK: 'OK',
-        HttpStatusCode.CREATED: 'Created',
-        HttpStatusCode.ACCEPTED: 'Accepted',
-        HttpStatusCode.NON_AUTHORITATIVE_INFORMATION: 'Non-Authoritative Information',
-        HttpStatusCode.NO_CONTENT: 'No Content',
-        HttpStatusCode.RESET_CONTENT: 'Reset Content',
-        HttpStatusCode.PARTIAL_CONTENT: 'Partial Content',
-        HttpStatusCode.MULTIPLE_CHOICES: 'Multiple Choices',
-        HttpStatusCode.MOVED_PERMANENTLY: 'Moved Permanently',
-        HttpStatusCode.FOUND: 'Found',
-        HttpStatusCode.SEE_OTHER: 'See Other',
-        HttpStatusCode.NOT_MODIFIED: 'Not Modified',
-        HttpStatusCode.USE_PROXY: 'Use Proxy',
-        HttpStatusCode.TEMPORARY_REDIRECT: 'Temporary Redirect',
-        HttpStatusCode.BAD_REQUEST: 'Bad Request',
-        HttpStatusCode.UNAUTHORIZED: 'Unauthorized',
-        HttpStatusCode.PAYMENT_REQUIRED: 'Payment Required',
-        HttpStatusCode.FORBIDDEN: 'Forbidden',
-        HttpStatusCode.NOT_FOUND: 'Not Found',
-        HttpStatusCode.METHOD_NOT_ALLOWED: 'Method Not Allowed',
-        HttpStatusCode.NOT_ACCEPTABLE: 'Not Acceptable',
-        HttpStatusCode.PROXY_AUTHENTICATION_REQUIRED: 'Proxy Authentication Required',
-        HttpStatusCode.REQUEST_TIMEOUT: 'Request Timeout',
-        HttpStatusCode.CONFLICT: 'Conflict',
-        HttpStatusCode.GONE: 'Gone',
-        HttpStatusCode.LENGTH_REQUIRED: 'Length Required',
-        HttpStatusCode.PRECONDITION_FAILED: 'Precondition Failed',
-        HttpStatusCode.REQUEST_ENTITY_TOO_LARGE: 'Request Entity Too Large',
-        HttpStatusCode.REQUEST_URI_TOO_LONG: 'Request-URI Too Long',
-        HttpStatusCode.UNSUPPORTED_MEDIA_TYPE: 'Unsupported Media Type',
-        HttpStatusCode.REQUESTED_RANGE_NOT_SATISFIABLE: 'Requested Range Not Satisfiable',
-        HttpStatusCode.EXPECTATION_FAILED: 'Expectation Failed',
-        HttpStatusCode.INTERNAL_SERVER_ERROR: 'Internal Server Error',
-        HttpStatusCode.NOT_IMPLEMENTED: 'Not Implemented',
-        HttpStatusCode.BAD_GATEWAY: 'Bad Gateway',
-        HttpStatusCode.SERVICE_UNAVAILABLE: 'Service Unavailable',
-        HttpStatusCode.GATEWAY_TIMEOUT: 'Gateway Timeout',
-        HttpStatusCode.HTTP_VERSION_NOT_SUPPORTED: 'HTTP Version Not Supported',
-    }
-
 
 
 class TMiniWebClient:
@@ -348,7 +280,7 @@ class TMiniWebClient:
     # エラーを返す
     async def write_error_response(self, code, content=None):
         if content is None:
-            content = TMiniWebServer._http_status_messages.get(code, '')
+            content = HttpStatusCode.messages.get(code, '')
         TMiniWebServer.dlog(content)
         await self.write_response(http_status=code, content=content)
 
@@ -392,7 +324,7 @@ class TMiniWebClient:
     # ステータスコードの出力
     # ex) HTTP/1.1 404 Not Found
     def _write_status_code(self, status_code):
-        msg = TMiniWebServer._http_status_messages.get(status_code, '')
+        msg = HttpStatusCode.messages.get(status_code, '')
         data = f"HTTP/1.1 {status_code} {msg}\r\n"
         self._writer.write(data)
 
