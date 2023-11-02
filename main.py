@@ -3,9 +3,9 @@ from TMiniWebServer import TMiniWebServer
 import uasyncio as asyncio
 import gc
 
-import sample_basic
-import sample_restapi
-import sample_websocket
+import route.sample_basic
+import route.sample_restapi
+import route.sample_websocket
 
 from machine import Pin
 import time
