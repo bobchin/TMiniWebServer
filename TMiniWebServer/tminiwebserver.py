@@ -4,8 +4,11 @@ import re
 import gc
 import binascii
 import hashlib
-from json import loads, dumps
+from json import loads
+from . import logging
 from .tminiwebserver_util import TMiniWebServerUtil, HttpStatusCode
+
+LOGGER = logging.getLogger(__name__)
 
 # ルート毎の処理
 class _WebServerRoute:
@@ -26,7 +29,7 @@ class _WebServerRoute:
 class TMiniWebServer:
     # デコレータで登録された処理のリスト
     _decorate_route_handlers = []
-    debug = 0
+
     gc_after_filesend = 1   ## ファイル送信後にGC発動しておくためのフラグ.
 
     # デコレータ
@@ -51,15 +54,6 @@ class TMiniWebServer:
             cls._decorate_route_handlers.append(item)
             return func
         return websocket_decorator
-
-    @staticmethod
-    def log(message):
-        print(f"[log] {message}")
-
-    @staticmethod
-    def dlog(message):
-        if TMiniWebServer.debug == 1:
-            print(f"[debug] {message}")
 
     # コンストラクタ
     # port   : Webサーバのポート
@@ -88,10 +82,10 @@ class TMiniWebServer:
                 elif s:
                     route_regex += '/' + s
             route_regex += '$'
-            TMiniWebServer.dlog(f"  url_path:{url_path} -> regex: {route_regex}")
+            LOGGER.debug(f"  url_path: {url_path} -> regex: {route_regex}")
             route_regex = re.compile(route_regex)
             self._route_handlers.append(_WebServerRoute(url_path, method.upper(), func, route_arg_names, route_regex))
-            TMiniWebServer.dlog(f'route add: {url_path}, {route_arg_names}')
+            LOGGER.debug(f'route add : {url_path}, {route_arg_names}')
 
     # サーバを開始
     async def start(self):
@@ -100,7 +94,7 @@ class TMiniWebServer:
         server = await asyncio.start_server(self._server_proc, host=self._server_ip, port=self._server_port, backlog = 5)
         self._server = server
         self._running = True
-        TMiniWebServer.log(f'start server on {self._server_ip}:{self._server_port}')
+        LOGGER.info(f'start server on {self._server_ip}:{self._server_port}')
 
     # サーバを停止
     def stop(self):
@@ -122,7 +116,7 @@ class TMiniWebServer:
     # method  : HTTPメソッド
     # return: (ハンドラメソッド, キーのハッシュ)
     def _get_route_handler(self, url_path, method):
-        TMiniWebServer.dlog(f'search {url_path},{method}')
+        LOGGER.debug(f'search {url_path},{method}')
         try:
             # ルートハンドラが登録されているか
             if not self._route_handlers:
@@ -148,7 +142,7 @@ class TMiniWebServer:
 
         except Exception as ex:
             sys.print_exception(ex)
-            print(f"  {url_path}, {method}")
+            LOGGER.error(f"  {url_path}, {method}")
             return (None, None)
 
     # サーバメイン処理
@@ -156,19 +150,19 @@ class TMiniWebServer:
         addr = ''
         try:
             addr = writer.get_extra_info('peername')
-            TMiniWebServer.log(f"connected by {addr}")
+            LOGGER.info(f"connected by {addr}")
             client = TMiniWebClient(reader, writer, self)
             if not await client._processRequest():
-                TMiniWebServer.log(f'process request failed. {addr}')
+                LOGGER.info(f'process request failed. {addr}')
         except Exception as e:
-            TMiniWebServer.log(e)
+            LOGGER.error(e)
 
         try:
             writer.close()
             await writer.wait_closed()
         except:
             pass
-        TMiniWebServer.dlog(f"webclient is terminated. [{addr}]")
+        LOGGER.debug(f"webclient is terminated. [{addr}]")
 
     # wwwroot のパスを取得する
     # request_path: リクエストされたパス
@@ -223,7 +217,7 @@ class TMiniWebClient:
     # content_type:
     # content_charset:
     async def write_response(self, content, headers={}, http_status = HttpStatusCode.OK, content_type="text/html", content_charset='UTF-8'):
-        TMiniWebServer.dlog('[in] write_response')
+        LOGGER.debug('[in] write_response')
         try:
             if content:
                 if type(content) == str:
@@ -241,14 +235,14 @@ class TMiniWebClient:
             self._writer.write(content)
             await self._writer.drain()
         except Exception as ex:
-            TMiniWebServer.log(ex)
+            LOGGER.error(ex)
             pass
-        TMiniWebServer.dlog('[out] write_response')
+        LOGGER.debug('[out] write_response')
 
     # クライアントへファイルの内容を返す
     # file_phys_path: ファイルのパス
     async def write_response_from_file(self, file_phys_path, headers={}, http_status = HttpStatusCode.OK, content_type=None, content_charset='UTF-8'):
-        TMiniWebServer.dlog('[in] write_response_from_file')
+        LOGGER.debug('[in] write_response_from_file')
         try:
             if not TMiniWebServerUtil.is_exist_file(file_phys_path):
                 await self.write_error_response(HttpStatusCode.NOT_FOUND)
@@ -270,18 +264,18 @@ class TMiniWebClient:
                             await self._writer.drain()
                         else:
                             break
-            if TMiniWebServer.gc_after_filesend:
+            if self._server.gc_after_filesend:
                 gc.collect()
         except Exception as ex:
             sys.print_exception(ex)
 
-        TMiniWebServer.dlog('[out] write_response_from_file')
+        LOGGER.debug('[out] write_response_from_file')
 
     # エラーを返す
     async def write_error_response(self, code, content=None):
         if content is None:
             content = HttpStatusCode.messages.get(code, '')
-        TMiniWebServer.dlog(content)
+        LOGGER.debug(content)
         await self.write_response(http_status=code, content=content)
 
     # リクエストを読み込む
@@ -318,7 +312,7 @@ class TMiniWebClient:
                                 result[TMiniWebServerUtil.unquote_plus(param[0])] = value
         except:
             pass
-        TMiniWebServer.dlog(f'www-form-urlencoded: {result}')
+        LOGGER.debug(f'www-form-urlencoded: {result}')
         return result
 
     # ステータスコードの出力
@@ -396,17 +390,16 @@ class TMiniWebClient:
                             if len(param) > 0:
                                 value = TMiniWebServerUtil.unquote(param[1]) if len(param) > 1 else ''
                                 self._query_params[TMiniWebServerUtil.unquote(param[0])] = value
-                        TMiniWebServer.dlog(f'{self} query_string:{self._query_string}')
-                        TMiniWebServer.dlog(f'{self} query_params:{self._query_params}')
+                        LOGGER.debug(f'{self} query_string:{self._query_string}')
+                        LOGGER.debug(f'{self} query_params:{self._query_params}')
                 return True
             else:
-                TMiniWebServer.dlog("failed read first line (httprequest)")
+                LOGGER.debug("failed read first line (httprequest)")
                 return False
 
-            return True
         except Exception as ex:
-            TMiniWebServer.log(ex)
-        return False
+            LOGGER.error(ex)
+            return False
 
     # ヘッダの解析
     # _headers に格納
@@ -420,10 +413,10 @@ class TMiniWebClient:
                     self._content_type = self._headers.get("content-type", None)
                     self._content_length = (int)(self._headers.get('content-length', 0))
 
-                TMiniWebServer.dlog(f"headers={self._headers}")
+                LOGGER.debug(f"headers={self._headers}")
                 return True
             else:
-                TMiniWebServer.log(f"_parse_header warning: {elements}")
+                LOGGER.info(f"_parse_header warning: {elements}")
                 return False
 
     # upgrade ヘッダを確認する
@@ -442,17 +435,17 @@ class TMiniWebClient:
 
     # 通常のHTTP通信処理
     async def _routing_http(self):
-        TMiniWebServer.dlog('in _routing_http')
+        LOGGER.debug('in _routing_http')
         route, route_args = self._server._get_route_handler(self._req_path, self._method)
         if self._method is None:
-            print(self._req_path)
-            print(self._path)
-            print(self._headers)
+            LOGGER.debug(f'req_path: {self._req_path}')
+            LOGGER.debug(f'path:     {self._path}')
+            LOGGER.debug(f'headers:  {self._headers}')
 
         result = False
         # 登録された処理がある場合は、デコレータを実行
         if route:
-            TMiniWebServer.dlog(f'found route: {self._req_path}, args: {route_args}')
+            LOGGER.debug(f'found route: {self._req_path}, args: {route_args}')
             try:
                 if route_args is not None:
                     await route(self, route_args)
@@ -460,20 +453,20 @@ class TMiniWebClient:
                     await route(self)
                 result = True
             except Exception as ex:
-                TMiniWebServer.dlog(f"in _routeing_http: {ex}")
+                LOGGER.error(f"in _routeing_http: {ex}")
         # 登録された処理がない場合
         else:
-            TMiniWebServer.dlog('routing is not found.')
+            LOGGER.debug('routing is not found.')
             # GET 処理の場合はファイルを探してあれば返す
             if self._method.upper() == 'GET':
-                TMiniWebServer.dlog(f'search static files [{self._server._wwwroot}]')
+                LOGGER.debug(f'search static files [{self._server._wwwroot}]')
                 file_phys_path, mime_type = self._server.get_phys_path_in_wwwroot(self._req_path)
 
                 if file_phys_path is None:
                     await self.write_error_response(HttpStatusCode.NOT_FOUND)
-                    TMiniWebServer.log(f'fild not found [{self._req_path}]')
+                    LOGGER.info(f'fild not found [{self._req_path}]')
                 else:
-                    TMiniWebServer.dlog(f'file found [{mime_type}, {file_phys_path}]')
+                    LOGGER.debug(f'file found [{mime_type}, {file_phys_path}]')
                     await self.write_response_from_file(file_phys_path, content_type=mime_type)
 
                 result = True ## メソッドの処理結果としては正常の処理.
@@ -492,29 +485,29 @@ class TMiniWebClient:
 
     # WebSocket通信処理
     async def _routing_websocket(self):
-        TMiniWebServer.dlog('in _routing_websocket')
+        LOGGER.debug('in _routing_websocket')
         route, route_args = self._server._get_route_handler(self._req_path, 'websocket')
         if not route:
-            TMiniWebServer.dlog(f'not found websocket route. [{self._req_path}]')
+            LOGGER.debug(f'not found websocket route. [{self._req_path}]')
             await self._write_bad_request()
             return True
 
         websocket = TMiniWebSocket(self)
         try:
             if await websocket.handshake() == False:
-                TMiniWebServer.dlog('handshake failed.')
+                LOGGER.debug('handshake failed.')
                 return True
         except:
             return False
 
         try:
-            TMiniWebServer.dlog(f'found route: {self._req_path}, args: {route_args}')
+            LOGGER.debug(f'found route: {self._req_path}, args: {route_args}')
             if route_args:
                 await route(websocket, route_args)
             else:
                 await route(websocket)
         except Exception as ex:
-            TMiniWebServer.log(ex)
+            LOGGER.error(ex)
             return False
 
         return True
@@ -579,7 +572,7 @@ class TMiniWebSocket:
                         return data, self.MessageType.TEXT
             except Exception as ex:
                 self._closed = True
-                TMiniWebServer.log(f'WebSocket closed. (exception : {ex})')
+                LOGGER.error(f'WebSocket closed. (exception : {ex})')
                 return None, None
         return None, None
 
@@ -628,7 +621,7 @@ class TMiniWebSocket:
     async def _read_frame(self):
         header = await self._client._reader.read(2)
         if len(header) != 2:
-            TMiniWebServer.log('Invalid WebSocket frame header')
+            LOGGER.info('Invalid WebSocket frame header')
             raise OSError(32, 'WebSocket connection closed')
         ## ヘッダのパース.
         fin = header[0] & 0x80 > 0
