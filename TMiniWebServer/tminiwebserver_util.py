@@ -42,11 +42,6 @@ class TMiniWebServerUtil:
     # ファイル拡張子からMIMEタイプを取得する
     @staticmethod
     def get_minetype_from_ext(file_path):
-        # file_path = file_path.lower()
-        # for ext in TMiniWebServerUtil._mime_types:
-        #     if file_path.endswith(ext):
-        #         return TMiniWebServerUtil._mime_types[ext]
-        # return 'application/octet-stream'
         lists = TMiniWebServerUtil._mime_types
         results = [lists[ext] for ext in lists if file_path.lower().endswith(ext)]
         return results[0] if len(results) > 0 else 'application/octet-stream'
