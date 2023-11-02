@@ -66,7 +66,7 @@ class TMiniWebServer:
     def _add_route_item(self, source_decorators):
         for url_path, method, func in source_decorators:
             # <> で囲われている場合は、正規表現で置換する
-            regex_list = ['/(\\w*)' if s.startswith('<') and s.endswith('>') else '/' + s for s in url_path.split('/')]
+            regex_list = ['/(\\w*)' if s.startswith('<') and s.endswith('>') else '/' + s for s in url_path.split('/') if s]
             route_str = ''.join(regex_list) + '$'
             route_regex = re.compile(route_str)
             LOGGER.debug(f"  url_path: {url_path} -> regex: {route_str}")
