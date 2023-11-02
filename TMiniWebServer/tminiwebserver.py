@@ -137,9 +137,9 @@ class TMiniWebServer:
                 return (None, None)
 
             handler = filterd_handlers[0]
-            if handler.route_arg_names:
+            if handler.route_arg_names and (m := handler.route_regex.match(url_path)):
                 # <xxx> で指定された部分を辞書化する
-                values = handler.route_regex.findall(url_path)[0]
+                values = m.groups()
                 values = list(map(lambda s: int(s) if s.isdigit() else s, values))
                 route_args = dict(zip(handler.route_arg_names, values))
             else:
