@@ -2,8 +2,10 @@ import gc
 import sys
 from os import stat
 
-
+# ユーティリティクラス
 class TMiniWebServerUtil:
+
+    # 文字列をURLデコードする
     @staticmethod
     def unquote(s):
         r = str(s).split('%')
@@ -18,15 +20,12 @@ class TMiniWebServerUtil:
         except:
             return str(s)
 
+    # + をスペースとして文字列をURLデコードする
     @staticmethod
     def unquote_plus(s):
         return TMiniWebServerUtil.unquote(s.replace('+', ' '))
 
-    @staticmethod
-    def escape_html(s):
-        return ''.join(TMiniWebServerUtil._html_escape_chars.get(c,c) for c in s)
-
-
+    # ファイルが存在するかどうか
     @staticmethod
     def is_exist_file(path):
         result = False
@@ -40,14 +39,19 @@ class TMiniWebServerUtil:
         gc.collect()
         return result
 
+    # ファイル拡張子からMIMEタイプを取得する
     @staticmethod
     def get_minetype_from_ext(file_path):
-        file_path = file_path.lower()
-        for ext in TMiniWebServerUtil._mime_types:
-            if file_path.endswith(ext):
-                return TMiniWebServerUtil._mime_types[ext]
-        return 'application/octet-stream'
+        # file_path = file_path.lower()
+        # for ext in TMiniWebServerUtil._mime_types:
+        #     if file_path.endswith(ext):
+        #         return TMiniWebServerUtil._mime_types[ext]
+        # return 'application/octet-stream'
+        lists = TMiniWebServerUtil._mime_types
+        results = [lists[ext] for ext in lists if file_path.lower().endswith(ext)]
+        return results[0] if len(results) > 0 else 'application/octet-stream'
 
+    # ファイルサイズを取得する
     @staticmethod
     def get_file_size(path):
         try:
@@ -56,14 +60,6 @@ class TMiniWebServerUtil:
         except Exception as ex:
             sys.print_exception(ex)
             return 0
-
-    _html_escape_chars = {
-        "&" : "&amp;",
-        '"' : "&quot;",
-        "'" : "&apos;",
-        ">" : "&gt;",
-        "<" : "&lt;"
-    }
 
     _mime_types = {
         '.txt' : 'text/plain',

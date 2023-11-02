@@ -47,11 +47,7 @@ class TMiniWebServer:
     # url_path: URLのパス
     @classmethod
     def with_websocket(cls, url_path):
-        def websocket_decorator(func):
-            item = (url_path, 'websocket', func)
-            cls._decorate_route_handlers.append(item)
-            return func
-        return websocket_decorator
+        return cls.route(url_path, 'websocket')
 
     # コンストラクタ
     # port   : Webサーバのポート
@@ -69,19 +65,13 @@ class TMiniWebServer:
     # source_decorators: デコレータで登録した処理タプルのリスト
     def _add_route_item(self, source_decorators):
         for url_path, method, func in source_decorators:
-            route_parts = url_path.split('/')
-            route_arg_names = [ ]
-            route_regex = ''
-            for s in route_parts:
-                # <> で囲われている場合は、名称で置換する
-                if s.startswith('<') and s.endswith('>'):
-                    route_arg_names.append(s[1:-1])
-                    route_regex += '/(\\w*)'
-                elif s:
-                    route_regex += '/' + s
-            route_regex += '$'
-            LOGGER.debug(f"  url_path: {url_path} -> regex: {route_regex}")
-            route_regex = re.compile(route_regex)
+            # <> で囲われている場合は、正規表現で置換する
+            regex_list = ['/(\\w*)' if s.startswith('<') and s.endswith('>') else '/' + s for s in url_path.split('/')]
+            route_str = ''.join(regex_list) + '$'
+            route_regex = re.compile(route_str)
+            LOGGER.debug(f"  url_path: {url_path} -> regex: {route_str}")
+
+            route_arg_names = [s[1:-1] for s in url_path.split('/') if s.startswith('<') and s.endswith('>')]
             self._route_handlers.append(_WebServerRoute(url_path, method.upper(), func, route_arg_names, route_regex))
             LOGGER.debug(f'route add : {url_path}, {route_arg_names}')
 
@@ -89,8 +79,8 @@ class TMiniWebServer:
     async def start(self):
         if self.is_started():
             return
-        server = await asyncio.start_server(self._server_proc, host=self._server_ip, port=self._server_port, backlog = 5)
-        self._server = server
+
+        self._server = await asyncio.start_server(self._server_proc, host=self._server_ip, port=self._server_port, backlog = 5)
         self._running = True
         LOGGER.info(f'start server on {self._server_ip}:{self._server_port}')
 
@@ -98,12 +88,15 @@ class TMiniWebServer:
     def stop(self):
         if not self.is_started():
             return
-        if self._server is not None:
-            try:
-                self._server.close()
-            except:
-                pass
-            self._running = False
+        if self._server is None:
+            return
+
+        try:
+            self._server.close()
+        except:
+            pass
+        self._running = False
+        LOGGER.info(f'stop server')
 
     # 実行中かどうか
     def is_started(self):
@@ -149,6 +142,7 @@ class TMiniWebServer:
         try:
             addr = writer.get_extra_info('peername')
             LOGGER.info(f"connected by {addr}")
+
             client = TMiniWebClient(reader, writer, self)
             if not await client._processRequest():
                 LOGGER.info(f'process request failed. {addr}')
@@ -167,10 +161,12 @@ class TMiniWebServer:
     def get_phys_path_in_wwwroot(self, request_path):
         file_path = ''
         exist_file = False
+
         # ルート指定以外の場合は、指定されたファイルを探す
         if request_path != '/':
             file_path = self._wwwroot + '/' + request_path
             exist_file = TMiniWebServerUtil.is_exist_file(file_path)
+
         # ルート指定の場合は、'index.html' or 'index.htm' を探す
         else:
             for file_name in ['index.html', 'index.htm']:
@@ -178,7 +174,10 @@ class TMiniWebServer:
                 exist_file = TMiniWebServerUtil.is_exist_file(file_path)
                 if exist_file:
                     break
+
         if not exist_file:
             return None, None
-        mime_type = TMiniWebServerUtil.get_minetype_from_ext(file_path)
-        return file_path, mime_type
+        else:
+            mime_type = TMiniWebServerUtil.get_minetype_from_ext(file_path)
+            LOGGER.debug(f'get static file. path:{file_path} type:{mime_type}')
+            return file_path, mime_type
