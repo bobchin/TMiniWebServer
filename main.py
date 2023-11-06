@@ -1,4 +1,4 @@
-from TMiniWebServer import TMiniWebServer
+from TMiniWebServer import TMiniWebServer, logging
 
 import uasyncio as asyncio
 import gc
@@ -8,7 +8,8 @@ import route.sample_restapi
 import route.sample_websocket
 
 from machine import Pin
-import time
+
+# logging.basicConfig(level=logging.DEBUG)
 
 ## LED
 led = Pin(25, Pin.OUT)
