@@ -176,8 +176,7 @@ class TMiniWebServer:
                     break
 
         if not exist_file:
-            return None, None
+            return None
         else:
-            mime_type = TMiniWebServerUtil.get_minetype_from_ext(file_path)
-            LOGGER.debug(f'get static file. path:{file_path} type:{mime_type}')
-            return file_path, mime_type
+            LOGGER.debug(f'get static file. path:{file_path}')
+            return file_path

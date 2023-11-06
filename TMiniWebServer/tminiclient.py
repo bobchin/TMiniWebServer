@@ -117,53 +117,24 @@ class TMiniWebClient:
     async def _routing_http(self):
         LOGGER.debug('in _routing_http')
         route, route_args = self._server._get_route_handler(self._req_path, self._method)
-        if self._method == "":
-            LOGGER.debug(f'req_path: {self._req_path}')
-            LOGGER.debug(f'path:     {self._path}')
-            LOGGER.debug(f'headers:  {self._headers}')
-
-        result = False
-        # 登録された処理がある場合は、デコレータを実行
-        if route:
-            LOGGER.debug(f'found route: {self._req_path}, args: {route_args}')
-            try:
-                if route_args is None:
-                    await route(self)
-                else:
-                    await route(self, route_args)
-                result = True
-            except Exception as ex:
-                LOGGER.error(f"in _routeing_http: {ex}")
-
-        # 登録された処理がない場合は、ファイル内容を読み込んで返す
-        else:
+        if not route:
             LOGGER.debug('routing is not found.')
-            # GET以外はエラー
             if self._method.upper() != 'GET':
+                # GET以外はエラー
                 await self.write_error_response(HttpStatusCode.BAD_REQUEST)
-                result = True ## メソッドの処理結果としては正常の処理としておく.
-
-            # GET 処理の場合はファイルを探してあれば返す
-            LOGGER.debug(f'search static files [{self._server._wwwroot}]')
-            file_phys_path, mime_type = self._server.get_phys_path_in_wwwroot(self._req_path)
-            if file_phys_path is None:
-                # ファイルがない場合はエラー
-                await self.write_error_response(HttpStatusCode.NOT_FOUND)
-                LOGGER.info(f'fild not found [{self._req_path}]')
             else:
-                # ファイルがなある場合は読み込んで返す
-                await self.write_response_from_file(file_phys_path, content_type=mime_type)
-                LOGGER.debug(f'file found [{mime_type}, {file_phys_path}]')
+                # GET 処理の場合はファイルを探してあれば返す
+                file_phys_path = self._server.get_phys_path_in_wwwroot(self._req_path)
+                await self.write_response_from_file(file_phys_path)
+            await self.close()
+            return True ## メソッドの処理結果としては正常の処理.
 
-            result = True ## メソッドの処理結果としては正常の処理.
-
+        # 登録された処理がある場合は、デコレータを実行
+        LOGGER.debug(f'found route: {self._req_path}, args: {route_args}')
         try:
-            self._writer.close()
-            await self._writer.wait_closed()
-        except Exception as ex:
-            sys.print_exception(ex)
-            pass
-        return result
+            return await self._fire_route(route, self, route_args)
+        finally:
+            await self.close()
 
     # WebSocket通信処理
     async def _routing_websocket(self):
@@ -179,25 +150,33 @@ class TMiniWebClient:
             if await websocket.handshake() == False:
                 LOGGER.debug('handshake failed.')
                 return True
-        except:
-            return False
-
-        try:
-            LOGGER.debug(f'found route: {self._req_path}, args: {route_args}')
-            if route_args:
-                await route(websocket, route_args)
-            else:
-                await route(websocket)
         except Exception as ex:
-            LOGGER.error(ex)
+            LOGGER.error(f'in _routing_websocket: {ex}')
             return False
 
-        return True
+        # 登録された処理がある場合は、デコレータを実行
+        LOGGER.debug(f'found route: {self._req_path}, args: {route_args}')
+        return await self._fire_route(route, websocket, route_args)
+
+    # ルーティングを実行する
+    async def _fire_route(self, route, obj, args):
+        try:
+            if args:
+                await route(obj, args)
+            else:
+                await route(obj)
+            return True
+        except Exception as ex:
+            LOGGER.error(f'_fire_route: {ex}')
+            return False
 
     # クライアントと切断する
     async def close(self):
-        self._writer.close()
-        await self._writer.wait_closed()
+        try:
+            self._writer.close()
+            await self._writer.wait_closed()
+        except Exception as ex:
+            sys.print_exception(ex)
 
     # クライアントへ応答する
     # content: HTTPの内容
