@@ -31,9 +31,11 @@ class TMiniWebClient:
 
     # クライアントのリクエスト処理
     async def _processRequest(self):
+        # ヘッダのリクエストラインを解析
         if not await self._parse():
             return await self.write_error_response(HttpStatusCode.INTERNAL_SERVER_ERROR)
 
+        # ヘッダ全体を解析
         if not await self._parse_header():
             return await self.write_error_response(HttpStatusCode.BAD_REQUEST)
 
@@ -45,7 +47,7 @@ class TMiniWebClient:
             # WebSocket
             return await self._routing_websocket()
         else:
-            # error
+            # upgrade ヘッダが指定され、"websocket" 以外はエラーとする
             return await self.write_error_response(HttpStatusCode.BAD_REQUEST)
 
     # リクエスト内容の解析
@@ -84,7 +86,8 @@ class TMiniWebClient:
             LOGGER.error(ex)
             return False
 
-    # upgrade ヘッダを確認する
+    # connection ヘッダが指定されている場合に upgrade ヘッダを返す
+    # connection = upgrade かつ upgrade = websocket の場合、websocket にアップグレードする
     def _check_upgrade(self):
         if 'upgrade' in self._headers.get('connection', '').lower():
             return self._headers.get('upgrade', '').lower()
