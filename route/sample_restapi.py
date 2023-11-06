@@ -6,7 +6,7 @@ from json import dumps
 ##-------------------------------------------------------------------------
 @TMiniWebServer.route('/article/<id>', method='GET')
 async def restapi_article_get(client, args):
-    json_data = f"{{ 'id': {args['id']}, 'message': 'これは本文のテキストです。' }}"
+    json_data = f'{{ "id": {args["id"]}, "message": "これは本文のテキストです。" }}'
     await client.write_response(content=json_data, content_type='application/json')
 
 @TMiniWebServer.route('/article/<id>', method='PUT')
