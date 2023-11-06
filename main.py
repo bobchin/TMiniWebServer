@@ -9,7 +9,7 @@ import route.sample_websocket
 
 from machine import Pin
 
-# logging.basicConfig(level=logging.DEBUG)
+# logging.basicConfig(level=logging.WARNING)
 
 ## LED
 led = Pin(25, Pin.OUT)
