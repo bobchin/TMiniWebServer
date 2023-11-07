@@ -16,7 +16,7 @@ async def websockcet_handler(websocket):
             if data == 'cmd_close':
                 await websocket.close()
             else:
-                await websocket.send("Hello,world!!")
+                websocket.send("Hello,world!!")
             if data is None:
                 print(f'disconnected.')
         except Exception as ex:
@@ -30,6 +30,7 @@ async def ws_echo_handler(websocket):
         try:
             data = await websocket.receive()
             print(f'received: {data}')
-            await websocket.send(data)
+            websocket.send(data)
         except Exception as ex:
             sys.print_exception(ex)
+            return
