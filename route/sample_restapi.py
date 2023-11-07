@@ -5,33 +5,31 @@ from json import dumps
 ## REST API 向け
 ##-------------------------------------------------------------------------
 @TMiniWebServer.route('/article/<id>', method='GET')
-async def restapi_article_get(client, args):
-    json_data = f'{{ "id": {args["id"]}, "message": "これは本文のテキストです。" }}'
-    await client.write_response(content=json_data, content_type='application/json')
+async def restapi_article_get(router):
+    json_data = f'{{ "id": {router.route_params["id"]}, "message": "これは本文のテキストです。" }}'
+    await router.write_json(json_data)
 
 @TMiniWebServer.route('/article/<id>', method='PUT')
-async def restapi_article_put(client, args):
-    data = await client.read_request_json_content()
+async def restapi_article_put(router):
+    data = await router.read_json()
     html = f"""<html>
     <body>
-        <p>ID: {args['id']}に対して、以下のデータで更新します。</p>
+        <p>ID: {router.route_params['id']}に対して、以下のデータで更新します。</p>
         <pre>
             {data}
         </pre>
     </body>
     </html>
     """
-    await client.write_response(content=html)
+    await router.write(html)
 
 @TMiniWebServer.route('/article', method='POST')
-async def restapi_article_post(client):
-    data = await client.read_request_json_content()
-
+async def restapi_article_post(router):
+    data = await router.read_json()
     res_obj = {
         'status' : 'OK',
         'id': 12345,
         'message': data['text']
     }
-    json_data = dumps(res_obj)
-    await client.write_response(content=json_data, content_type="application/json")
+    await router.write_json(res_obj)
 

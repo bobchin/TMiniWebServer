@@ -6,8 +6,9 @@ import sys
 ##-------------------------------------------------------------------------
 
 @TMiniWebServer.with_websocket('/ws/<id>')
-async def websockcet_handler(websocket, args):
-    print(f"id: {args['id']}")
+async def websockcet_handler(websocket):
+    id = websocket.route_params['id']
+    print(f"id: {id}")
     while not websocket.is_closed():
         try:
             data = await websocket.receive()
@@ -20,7 +21,7 @@ async def websockcet_handler(websocket, args):
                 print(f'disconnected.')
         except Exception as ex:
             sys.print_exception(ex)
-    print(f"closed websocket (id: {args['id']})")
+    print(f"closed websocket (id: {id})")
 
 @TMiniWebServer.with_websocket('/echo')
 async def ws_echo_handler(websocket):

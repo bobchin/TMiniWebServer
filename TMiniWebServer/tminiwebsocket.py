@@ -3,11 +3,12 @@ import hashlib
 import sys
 from . import logging
 from .tminiwebserver_util import HttpStatusCode
+from .tminirouter import TMiniRouter
 
 LOGGER = logging.getLogger(__name__)
 
 # WebSocket通信処理をするクラス
-class TMiniWebSocket:
+class TMiniWebSocket(TMiniRouter):
     class Opcode:
         CONTINUE = 0
         TEXT = 1
@@ -17,8 +18,8 @@ class TMiniWebSocket:
         PONG = 10
 
     # コンストラクタ
-    def __init__(self, client):
-        self._client = client
+    def __init__(self, req, res, args):
+        super().__init__(req, res, args)
         self._closed = False
         pass
 
@@ -36,9 +37,9 @@ class TMiniWebSocket:
 
     # websocket のコネクション確立する
     async def handshake(self):
-        websocket_key = self._client._headers.get('sec-websocket-key', None)
+        websocket_key = self.request._headers.get('sec-websocket-key', None)
         if websocket_key is None:
-            self._client._write_bad_request()
+            self.response.write_bad_request()
             return False
 
         await self._send_upgrade_response(websocket_key)
@@ -91,12 +92,12 @@ class TMiniWebSocket:
     async def _send_upgrade_response(self, websocket_key):
         response_key = self._create_response_key(websocket_key)
 
-        self._client._write_status_code(HttpStatusCode.SWITCH_PROTOCOLS)
-        self._client._write_header('upgrade', 'websocket')
-        self._client._write_header('connection', 'upgrade')
-        self._client._write_header('sec-websocket-accept', response_key)
-        self._client._writer.write("\r\n")
-        await self._client._writer.drain()
+        self.response._write_status_code(HttpStatusCode.SWITCH_PROTOCOLS)
+        self.response._write_header('upgrade', 'websocket')
+        self.response._write_header('connection', 'upgrade')
+        self.response._write_header('sec-websocket-accept', response_key)
+        self.response._writer.write("\r\n")
+        await self.response._writer.drain()
 
     # フレームを書き込む
     async def _send_core(self, opcode, payload):
@@ -128,8 +129,8 @@ class TMiniWebSocket:
 
             # データ
             frame.extend(payload)
-            self._client._writer.write(frame)
-            await self._client._writer.drain()
+            self.response._writer.write(frame)
+            await self.response._writer.drain()
         except OSError as ex:
             if ex.errno == 104: ## ECONNREST
                 self._closed = True
@@ -139,7 +140,7 @@ class TMiniWebSocket:
 
     # フレームを読み込む
     async def _read_frame(self):
-        header = await self._client._reader.read(2)
+        header = await self.request._reader.read(2)
         if len(header) != 2:
             LOGGER.info('Invalid WebSocket frame header')
             raise OSError(32, 'WebSocket connection closed')
@@ -147,15 +148,15 @@ class TMiniWebSocket:
         ## ヘッダのパース
         _, opcode, has_mask, length = self._parse_frame_header(header)
         if length < 0:
-            length = await self._client._reader.read(length * -1)
+            length = await self.request._reader.read(length * -1)
             length = int.from_bytes(length, 'big')
         LOGGER.debug(f"opcode: {opcode}")
         LOGGER.debug(f"has_mask: {has_mask}")
         LOGGER.debug(f"length: {length}")
 
-        mask = await self._client._reader.read(4) if has_mask else None
+        mask = await self.request._reader.read(4) if has_mask else None
         LOGGER.debug(f"mask: 0x{mask.hex().upper() if mask else 'None'}")
-        payload = await self._client._reader.read(length)
+        payload = await self.request._reader.read(length)
         if mask:
             payload = bytes(x ^ mask[i % 4] for i, x, in enumerate(payload))
         return opcode, payload

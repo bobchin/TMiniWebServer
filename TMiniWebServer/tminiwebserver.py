@@ -3,8 +3,12 @@ import sys
 import re
 
 from . import logging
-from .tminiclient import TMiniWebClient
 from .tminiwebserver_util import TMiniWebServerUtil
+
+from .tminirequest import TMiniRequest
+from .tminiresponse import TMiniResponse
+from .tminirouter import TMiniRouter
+from .tminiwebsocket import TMiniWebSocket
 
 LOGGER = logging.getLogger(__name__)
 
@@ -59,6 +63,8 @@ class TMiniWebServer:
         self._wwwroot = wwwroot
         self._running = False
         self._route_handlers = []
+        self._request = None
+        self._response = None
         self._add_route_item(self._decorate_route_handlers)
 
     # _route_handlers を構築する
@@ -138,23 +144,19 @@ class TMiniWebServer:
 
     # サーバメイン処理
     async def _server_proc(self, reader, writer):
-        addr = ''
+        LOGGER.info("_server_proc")
+        request = TMiniRequest(reader)
+        response = TMiniResponse(writer)
         try:
             addr = writer.get_extra_info('peername')
             LOGGER.info(f"connected by {addr}")
 
-            client = TMiniWebClient(reader, writer, self)
-            if not await client._processRequest():
-                LOGGER.info(f'process request failed. {addr}')
+            if not await self._processRequest(request, response):
+                LOGGER.info('process request failed.')
         except Exception as e:
             LOGGER.error(e)
-
-        try:
-            writer.close()
-            await writer.wait_closed()
-        except:
-            pass
-        LOGGER.debug(f"webclient is terminated. [{addr}]")
+        finally:
+            await response.close()
 
     # wwwroot のパスを取得する
     # request_path: リクエストされたパス
@@ -180,3 +182,75 @@ class TMiniWebServer:
         else:
             LOGGER.debug(f'get static file. path:{file_path}')
             return file_path
+
+    ################################################################################################
+    # クライアントのリクエスト処理
+    async def _processRequest(self, request, response):
+        result, code = await request.parse()
+        if result == False:
+            return response.write_error_response(code)
+
+        is_upg = request.check_upgrade()
+        if not is_upg:
+            # HTTP
+            return await self._routing_http(request, response)
+        elif is_upg == 'websocket':
+            # WebSocket
+            return await self._routing_websocket(request, response)
+        else:
+            # upgrade ヘッダが指定され、"websocket" 以外はエラーとする
+            return response.write_bad_request()
+
+    # 通常のHTTP通信処理
+    async def _routing_http(self, request, response):
+        LOGGER.debug('in _routing_http')
+        path, method = request.get()
+        route, route_args = self._get_route_handler(path, method)
+        if not route:
+            LOGGER.debug('routing is not found.')
+            if method != 'GET':
+                # GET以外はエラー
+                await response.write_bad_request()
+            else:
+                # GET 処理の場合はファイルを探してあれば返す
+                file_phys_path = self.get_phys_path_in_wwwroot(path)
+                await response.write_response_from_file(file_phys_path)
+            await response.close()
+            return True ## メソッドの処理結果としては正常の処理.
+
+        router = TMiniRouter(request, response, route_args)
+        try:
+            # 登録された処理がある場合は、デコレータを実行
+            LOGGER.debug(f'found route: {path}, args: {route_args}')
+            await route(router)
+            return True
+        except Exception as ex:
+            LOGGER.error(f'in _routing_http: {ex}')
+            return False
+        finally:
+            await response.close()
+
+    # WebSocket通信処理
+    async def _routing_websocket(self, request, response):
+        LOGGER.debug('in _routing_websocket')
+        path, _ = request.get()
+        route, route_args = self._get_route_handler(path, 'websocket')
+        if not route:
+            LOGGER.debug(f'not found websocket route. [{path}]')
+            await response.write_bad_request()
+            return True
+
+        websocket = TMiniWebSocket(request, response, route_args)
+        try:
+            if await websocket.handshake() == False:
+                LOGGER.debug('handshake failed.')
+                return True
+
+            # 登録された処理がある場合は、デコレータを実行
+            LOGGER.debug(f'found route: {path}, args: {route_args}')
+            await route(websocket)
+            return True
+
+        except Exception as ex:
+            LOGGER.error(f'in _routing_websocket: {ex}')
+            return False
