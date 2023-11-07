@@ -218,8 +218,9 @@ class TMiniWebServer:
             await response.close()
             return True ## メソッドの処理結果としては正常の処理.
 
-        router = TMiniRouter(request, response, route_args)
         try:
+            router = TMiniRouter(request, response, route_args)
+
             # 登録された処理がある場合は、デコレータを実行
             LOGGER.debug(f'found route: {path}, args: {route_args}')
             await route(router)
@@ -240,8 +241,8 @@ class TMiniWebServer:
             await response.write_bad_request()
             return True
 
-        websocket = TMiniWebSocket(request, response, route_args)
         try:
+            websocket = TMiniWebSocket(request, response, route_args)
             if await websocket.handshake() == False:
                 LOGGER.debug('handshake failed.')
                 return True
