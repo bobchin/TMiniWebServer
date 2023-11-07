@@ -32,9 +32,8 @@ class TMiniResponse:
             # ステータスコード+ヘッダ+コンテンツ
             self._write_status_code(http_status)
             self._write_headers(headers, content_type, content_charset, content_length)
-            await self._writer.drain()
-            self._writer.write(content)
-            await self._writer.drain()
+            await self._drain()
+            await self._drain(content)
         except Exception as ex:
             LOGGER.error(ex)
             pass
@@ -65,7 +64,7 @@ class TMiniResponse:
             # ステータスコード+ヘッダ
             self._write_status_code(http_status)
             self._write_headers(headers, content_type, content_charset, content_length)
-            await self._writer.drain()
+            await self._drain()
 
             # 内容の書き込み
             if content_length > 0:
@@ -73,8 +72,7 @@ class TMiniResponse:
                     while True:
                         data = f.read(4*1024)
                         if len(data) > 0:
-                            self._writer.write(data)
-                            await self._writer.drain()
+                            await self._drain(data)
                         else:
                             break
 
@@ -128,6 +126,11 @@ class TMiniResponse:
         if content_type:
             ct = content_type + ((f"; charset={charset}") if charset else "")
         self._write_header('content-type', ct)
+
+    async def _drain(self, predata=None):
+        if predata is not None:
+            self._writer.write(predata)
+        await self._writer.drain()
 
     # クライアントと切断する
     async def close(self):
