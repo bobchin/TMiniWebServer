@@ -108,6 +108,98 @@ class TMiniWebServer:
     def is_started(self):
         return self._running
 
+    # wwwroot のパスを取得する
+    # request_path: リクエストされたパス
+    def get_phys_path_in_wwwroot(self, request_path):
+        file_path = ''
+        exist_file = False
+
+        # ルート指定以外の場合は、指定されたファイルを探す
+        if request_path != '/':
+            file_path = self._wwwroot + '/' + request_path
+            exist_file = TMiniWebServerUtil.is_exist_file(file_path)
+
+        # ルート指定の場合は、'index.html' or 'index.htm' を探す
+        else:
+            for file_name in ['index.html', 'index.htm']:
+                file_path = self._wwwroot + '/' + file_name
+                exist_file = TMiniWebServerUtil.is_exist_file(file_path)
+                if exist_file:
+                    break
+
+        if not exist_file:
+            return None
+        else:
+            LOGGER.debug(f'get static file. path:{file_path}')
+            return file_path
+
+    ################################################################################################
+    # サーバメイン処理
+    async def _server_proc(self, reader, writer):
+        LOGGER.info("_server_proc")
+        request = TMiniRequest(reader)
+        response = TMiniResponse(writer)
+        try:
+            addr = writer.get_extra_info('peername')
+            LOGGER.info(f"connected by {addr}")
+
+            if not await self._processRequest(request, response):
+                LOGGER.info('process request failed.')
+        except Exception as e:
+            LOGGER.error(e)
+        finally:
+            await response.close()
+
+    # クライアントのリクエスト処理
+    async def _processRequest(self, request, response):
+        result, code = await request.parse()
+        if result == False:
+            return response.write_error_response(code)
+
+        is_upg = request.check_upgrade()
+        if not is_upg:
+            # HTTP
+            return await self._routing_http(request, response)
+        elif is_upg == 'websocket':
+            # WebSocket
+            return await self._routing_websocket(request, response)
+        else:
+            # upgrade ヘッダが指定され、"websocket" 以外はエラーとする
+            return response.write_bad_request()
+
+    # 通常のHTTP通信処理
+    async def _routing_http(self, request, response):
+        LOGGER.debug('in _routing_http')
+        path, method = request.get()
+        route, route_args = self._get_route_handler(path, method)
+        try:
+            if not route:
+                await self._response_file(response, method, path)
+                return True
+            else:
+                LOGGER.debug(f'found route: {path}, args: {route_args}')
+                router = TMiniRouter(request, response, route_args)
+                return await self._fire_route(route, router)
+        finally:
+            await response.close()
+
+    # WebSocket通信処理
+    async def _routing_websocket(self, request, response):
+        LOGGER.debug('in _routing_websocket')
+        path, _ = request.get()
+        route, route_args = self._get_route_handler(path, 'websocket')
+        try:
+            if not route:
+                LOGGER.debug(f'not found websocket route. [{path}]')
+                await response.write_bad_request()
+                return True
+            else:
+                LOGGER.debug(f'found route: {path}, args: {route_args}')
+                websocket = await TMiniWebSocket.factory(request, response, route_args)
+                return await self._fire_route(route, websocket)
+        finally:
+            pass
+
     # ルートハンドラを検索する
     # url_path: ルートパス
     # method  : HTTPメソッド
@@ -142,116 +234,24 @@ class TMiniWebServer:
             LOGGER.error(f"  {url_path}, {method}")
             return (None, None)
 
-    # サーバメイン処理
-    async def _server_proc(self, reader, writer):
-        LOGGER.info("_server_proc")
-        request = TMiniRequest(reader)
-        response = TMiniResponse(writer)
+    # 静的ファイルを返す
+    async def _response_file(self, response, method, path):
+        if method == 'GET':
+            # GET 処理の場合はファイルを探してあれば返す
+            file_phys_path = self.get_phys_path_in_wwwroot(path)
+            LOGGER.debug(f'response_file. [{file_phys_path}]')
+            await response.write_response_from_file(file_phys_path)
+        else:
+            # GET以外はエラー
+            LOGGER.debug(f'not found route. [{path}]')
+            await response.write_bad_request()
+
+    # デコレータを実行
+    async def _fire_route(self, route, router):
         try:
-            addr = writer.get_extra_info('peername')
-            LOGGER.info(f"connected by {addr}")
-
-            if not await self._processRequest(request, response):
-                LOGGER.info('process request failed.')
-        except Exception as e:
-            LOGGER.error(e)
-        finally:
-            await response.close()
-
-    # wwwroot のパスを取得する
-    # request_path: リクエストされたパス
-    def get_phys_path_in_wwwroot(self, request_path):
-        file_path = ''
-        exist_file = False
-
-        # ルート指定以外の場合は、指定されたファイルを探す
-        if request_path != '/':
-            file_path = self._wwwroot + '/' + request_path
-            exist_file = TMiniWebServerUtil.is_exist_file(file_path)
-
-        # ルート指定の場合は、'index.html' or 'index.htm' を探す
-        else:
-            for file_name in ['index.html', 'index.htm']:
-                file_path = self._wwwroot + '/' + file_name
-                exist_file = TMiniWebServerUtil.is_exist_file(file_path)
-                if exist_file:
-                    break
-
-        if not exist_file:
-            return None
-        else:
-            LOGGER.debug(f'get static file. path:{file_path}')
-            return file_path
-
-    ################################################################################################
-    # クライアントのリクエスト処理
-    async def _processRequest(self, request, response):
-        result, code = await request.parse()
-        if result == False:
-            return response.write_error_response(code)
-
-        is_upg = request.check_upgrade()
-        if not is_upg:
-            # HTTP
-            return await self._routing_http(request, response)
-        elif is_upg == 'websocket':
-            # WebSocket
-            return await self._routing_websocket(request, response)
-        else:
-            # upgrade ヘッダが指定され、"websocket" 以外はエラーとする
-            return response.write_bad_request()
-
-    # 通常のHTTP通信処理
-    async def _routing_http(self, request, response):
-        LOGGER.debug('in _routing_http')
-        path, method = request.get()
-        route, route_args = self._get_route_handler(path, method)
-        if not route:
-            LOGGER.debug('routing is not found.')
-            if method != 'GET':
-                # GET以外はエラー
-                await response.write_bad_request()
-            else:
-                # GET 処理の場合はファイルを探してあれば返す
-                file_phys_path = self.get_phys_path_in_wwwroot(path)
-                await response.write_response_from_file(file_phys_path)
-            await response.close()
-            return True ## メソッドの処理結果としては正常の処理.
-
-        try:
-            router = TMiniRouter(request, response, route_args)
-
-            # 登録された処理がある場合は、デコレータを実行
-            LOGGER.debug(f'found route: {path}, args: {route_args}')
             await route(router)
             return True
-        except Exception as ex:
-            LOGGER.error(f'in _routing_http: {ex}')
-            return False
-        finally:
-            await response.close()
-
-    # WebSocket通信処理
-    async def _routing_websocket(self, request, response):
-        LOGGER.debug('in _routing_websocket')
-        path, _ = request.get()
-        route, route_args = self._get_route_handler(path, 'websocket')
-        if not route:
-            LOGGER.debug(f'not found websocket route. [{path}]')
-            await response.write_bad_request()
-            return True
-
-        try:
-            websocket = TMiniWebSocket(request, response, route_args)
-            if await websocket.handshake() == False:
-                LOGGER.debug('handshake failed.')
-                return True
-
-            # 登録された処理がある場合は、デコレータを実行
-            LOGGER.debug(f'found route: {path}, args: {route_args}')
-            await route(websocket)
-            return True
 
         except Exception as ex:
-            LOGGER.error(f'in _routing_websocket: {ex}')
+            LOGGER.error(f'_fire_route: {ex}')
             return False
